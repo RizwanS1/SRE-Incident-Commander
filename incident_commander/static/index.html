@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111827">
+    <title>SRE Incident Commander</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SRE TOOLING</p>
+        <h1>Incident Commander</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="api-status" class="status-pill status-pending">Connecting...</span>
+        <button id="refresh-button" class="button button-secondary" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <nav class="quick-links" aria-label="Selected incident navigation">
+      <button type="button" data-target="incident-overview-panel" disabled>Alertmanager alert</button>
+      <button type="button" data-agent-filter="metrics" disabled>Prometheus evidence</button>
+      <button type="button" data-target="incident-report-panel" disabled>Grafana SLO report</button>
+      <button type="button" data-agent-filter="traces" disabled>Jaeger traces</button>
+      <button type="button" data-agent-filter="logs" disabled>Kubernetes logs</button>
+      <button type="button" data-agent-filter="all" disabled>All agent logs</button>
+    </nav>
+
+    <main class="layout">
+      <aside class="panel incident-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">INBOX</p>
+            <h2>Incidents</h2>
+          </div>
+          <span id="incident-count" class="count-badge">0</span>
+        </div>
+        <p class="muted">Choose an incident to inspect its findings, report, and agent events.</p>
+        <div id="incident-list" class="incident-list" aria-live="polite"></div>
+        <div id="empty-inbox" class="empty-state">
+          <strong>No incidents found</strong>
+          <span>Send an Alertmanager alert or run <code>python scripts/demo.py</code>.</span>
+        </div>
+      </aside>
+
+      <section id="incident-detail" class="detail-column" aria-live="polite">
+        <div id="welcome" class="panel welcome-panel">
+          <p class="eyebrow">INCIDENT WORKSPACE</p>
+          <h2>Investigate first. Act only with approval.</h2>
+          <p>
+            Select an incident to review its telemetry-backed hypotheses, the
+            suggested manual command, SLO impact, and structured agent logs.
+          </p>
+          <p class="notice">
+            The recommendation does not execute automatically. Runbook actions
+            require a Kubernetes connection, an approval token, and an explicit
+            confirmation.
+          </p>
+          <a class="button button-primary link-button" href="/docs">Open API docs</a>
+        </div>
+
+        <div id="selected-incident" hidden>
+          <section id="incident-overview-panel" class="panel">
+            <div class="incident-heading">
+              <div>
+                <p id="incident-service" class="eyebrow"></p>
+                <h2 id="incident-title"></h2>
+                <p id="incident-summary" class="muted"></p>
+              </div>
+              <span id="incident-state" class="status-pill"></span>
+            </div>
+            <p id="incident-id" class="incident-id"></p>
+            <div id="agent-statuses" class="agent-statuses"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">RECOMMENDATION</p>
+                <h2 id="remediation-heading">Suggested remediation</h2>
+              </div>
+              <span id="risk-badge" class="risk-badge"></span>
+            </div>
+            <p class="muted">
+              The configured LLM ranks RCA hypotheses. Commands follow separate
+              evidence rules: rollback for a cited rollout, scale for saturation,
+              and restart only for an explicit process failure. Error metrics
+              alone do not trigger a restart.
+            </p>
+            <p id="remediation-reasoning" class="muted"></p>
+            <pre id="suggested-command" class="command-block"></pre>
+            <p id="remediation-status" class="muted"></p>
+            <button id="copy-command" class="button button-secondary" type="button" hidden>
+              Copy command
+            </button>
+            <button id="approve-button" class="button button-danger" type="button" hidden>
+              Review and approve fix
+            </button>
+
+            <form id="approval-form" class="approval-form" hidden>
+              <h3>Explicit operator approval</h3>
+              <p id="approval-command" class="notice"></p>
+              <label>
+                Approver name
+                <input id="approver-input" name="approver" autocomplete="name" required maxlength="120">
+              </label>
+              <label>
+                Approval token
+                <input id="token-input" name="token" type="password" autocomplete="off" required>
+              </label>
+              <label id="replicas-field" hidden>
+                Desired replicas (2-10)
+                <input id="replicas-input" name="replicas" type="number" min="2" max="10" value="2">
+              </label>
+              <label class="approval-check">
+                <input id="confirm-input" type="checkbox" required>
+                I reviewed the incident evidence and explicitly approve this action.
+              </label>
+              <div class="form-actions">
+                <button class="button button-danger" type="submit">Approve and execute</button>
+                <button id="cancel-approval" class="button button-secondary" type="button">Cancel</button>
+              </div>
+            </form>
+            <p id="action-result" class="action-result" role="status"></p>
+          </section>
+
+          <section id="incident-report-panel" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">INVESTIGATION</p>
+                <h2>Incident report</h2>
+              </div>
+              <a id="report-link" class="text-link" target="_blank" rel="noopener">Open report</a>
+            </div>
+            <pre id="incident-report" class="report-block">Loading report...</pre>
+          </section>
+
+          <section id="agent-logs-panel" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">AUDITABLE AGENT ACTIVITY</p>
+                <h2>Structured logs and evidence</h2>
+              </div>
+              <span id="event-count" class="count-badge">0</span>
+            </div>
+            <p class="muted">
+              Each entry identifies its agent, evidence source, and status.
+              Expand an entry to inspect its structured input and output.
+              Container stdout remains available with
+              <code>docker compose logs</code>.
+            </p>
+            <div id="event-list" class="event-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <span>No automatic remediation</span>
+      <span>Evidence is a hypothesis, not proof of cause</span>
+    </footer>
+  </body>
+</html>

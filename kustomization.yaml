@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sre
+resources:
+  - deploy/kubernetes/stack.yaml
+configMapGenerator:
+  - name: sre-otel-config
+    files:
+      - config.yaml=observability/otel/collector.yaml
+  - name: sre-prometheus-config
+    files:
+      - prometheus.yml=observability/prometheus/prometheus.yml
+      - rules.yml=observability/prometheus/rules.yml
+  - name: sre-alertmanager-config
+    files:
+      - alertmanager.yml=observability/alertmanager.yml
+  - name: sre-grafana-config
+    files:
+      - datasources.yml=observability/grafana/datasources.yml
+      - dashboards.yml=observability/grafana/dashboards.yml
+      - dashboard.json=observability/grafana/dashboard.json
+generatorOptions:
+  disableNameSuffixHash: true

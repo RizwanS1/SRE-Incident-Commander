@@ -1,0 +1,115 @@
+services:
+  orders:
+    build:
+      context: .
+      dockerfile: deploy/docker/orders.Dockerfile
+    image: sre-orders:local
+    environment:
+      SERVICE_NAME: orders
+      PAYMENTS_URL: http://payments:8000
+      INVENTORY_URL: http://inventory:8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on: [payments, inventory, otel-collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  payments:
+    build:
+      context: .
+      dockerfile: deploy/docker/payments.Dockerfile
+    image: sre-payments:local
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports: ["127.0.0.1:8002:8000"]
+    depends_on: [otel-collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  inventory:
+    build:
+      context: .
+      dockerfile: deploy/docker/inventory.Dockerfile
+    image: sre-inventory:local
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports: ["127.0.0.1:8003:8000"]
+    depends_on: [otel-collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports: ["127.0.0.1:4317:4317", "127.0.0.1:4318:4318", "127.0.0.1:8889:8889"]
+    depends_on: [jaeger]
+  jaeger:
+    image: jaegertracing/all-in-one:1.65.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["127.0.0.1:16686:16686", "127.0.0.1:4319:4317"]
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    ports: ["127.0.0.1:9090:9090"]
+    depends_on: [otel-collector, alertmanager]
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["127.0.0.1:9093:9093"]
+    depends_on: [incident-commander]
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: sre-local-only
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./observability/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./observability/grafana/dashboard.json:/var/lib/grafana/dashboards/sre-dashboard.json:ro
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [prometheus, jaeger]
+  incident-commander:
+    build:
+      context: .
+      dockerfile: deploy/docker/incident-commander.Dockerfile
+    image: sre-incident-commander:local
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      JAEGER_URL: http://jaeger:16686
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      APPROVAL_TOKEN: ${APPROVAL_TOKEN:-}
+      AUDIT_LOG_PATH: /var/lib/incident-commander/audit.jsonl
+      AGENT_LOG_PATH: /var/lib/incident-commander/agent-events.jsonl
+      INCIDENT_REPORT_DIR: /var/lib/incident-commander/incidents
+      POSTMORTEM_DIR: /var/lib/incident-commander/postmortems
+      KUBERNETES_ENABLED: "false"
+    volumes:
+      - ./artifacts:/var/lib/incident-commander
+    ports: ["127.0.0.1:8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+

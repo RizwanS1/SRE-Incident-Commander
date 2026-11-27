@@ -1,0 +1,64 @@
+{
+  "alert": {
+    "incident_id": "orders-recorded-001",
+    "alert_name": "ErrorBudgetBurnFast",
+    "service": "orders",
+    "starts_at": "2026-11-27T05:30:00Z",
+    "ends_at": "2026-11-27T05:35:00Z",
+    "summary": "Orders availability degraded"
+  },
+  "metrics": [
+    {
+      "service": "orders",
+      "metric": "error_ratio",
+      "timestamp": "2026-11-27T05:32:00Z",
+      "value": 0.02
+    },
+    {
+      "service": "orders",
+      "metric": "availability",
+      "timestamp": "2026-11-27T05:32:00Z",
+      "value": 0.98
+    },
+    {
+      "service": "orders",
+      "metric": "p95_latency_seconds",
+      "timestamp": "2026-11-27T05:32:00Z",
+      "value": 0.65
+    }
+  ],
+  "logs": [
+    {
+      "evidence_id": "pod-log-orders-1",
+      "service": "orders",
+      "source": "pod_log",
+      "observed_at": "2026-11-27T05:32:10Z",
+      "statement": "2026-11-27T05:32:10Z ERROR downstream payments request timed out"
+    }
+  ],
+  "changes": [
+    {
+      "evidence_id": "rs-orders-17",
+      "service": "orders",
+      "source": "deployment",
+      "observed_at": "2026-11-27T05:28:00Z",
+      "statement": "Recent rollout for orders: ReplicaSet orders-17, revision=17, created=2026-11-27T05:28:00Z."
+    }
+  ],
+  "spans": [
+    {
+      "span_id": "orders-span-failed",
+      "operation": "POST /orders",
+      "duration_ms": 720.0,
+      "status": "error",
+      "timestamp": "2026-11-27T05:32:10Z"
+    },
+    {
+      "span_id": "orders-span-fast",
+      "operation": "GET /healthz",
+      "duration_ms": 4.0,
+      "status": "ok",
+      "timestamp": "2026-11-27T05:32:11Z"
+    }
+  ]
+}
